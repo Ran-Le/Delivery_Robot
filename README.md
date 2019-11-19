@@ -1,2 +1,2 @@
 # AA274_Proj
-AAA274 Final Project
+AA274 Final Project
