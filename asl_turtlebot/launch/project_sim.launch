@@ -26,10 +26,10 @@
     <param name="publish_frequency" type="double" value="10.0" />
   </node>
 
-  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping" output="screen">
+  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping" output="log">
     <param name="base_frame" value="base_footprint"/>
     <param name="odom_frame" value="odom"/>
-    <param name="map_update_interval" value="2.0"/>
+    <param name="map_update_interval" value="1.0"/>
     <param name="maxUrange" value="4.0"/>
     <param name="minimumScore" value="100"/>
     <param name="linearUpdate" value="0.2"/>
@@ -60,10 +60,8 @@
     <param name="lasamplestep" value="0.005"/>
   </node>
 
-  <node pkg="asl_turtlebot" type="pose_controller.py" name="turtlebot_pose_controller" />
-  <node pkg="asl_turtlebot" type="cmd_pose_commander.py" name="cmd_pose_commander" />
+  <node pkg="asl_turtlebot" type="goal_commander.py" name="goal_commander" />
   <node pkg="asl_turtlebot" type="detector.py" name="turtlebot_detector" />
-  
+
   <node name="rviz" pkg="rviz" type="rviz" args="-d $(find asl_turtlebot)/rviz/project_sim.rviz"/>
-  
 </launch>
