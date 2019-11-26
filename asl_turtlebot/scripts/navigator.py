@@ -33,6 +33,9 @@ class Navigator:
     def __init__(self):
         rospy.init_node('turtlebot_navigator', anonymous=True)
         self.mode = Mode.IDLE
+        self.xlist=[]
+	self.ylist=[]
+	self.tlist=[]
 
         # current state
         self.x = 0.0
@@ -123,11 +126,11 @@ class Navigator:
         """
         loads in goal if different from current goal, and replans
         """
-        if data.x != self.x_g or data.y != self.y_g or data.theta != self.theta_g:
-            self.x_g = data.x
-            self.y_g = data.y
-            self.theta_g = data.theta
-            self.replan()
+        if not self.xlist or data.x != self.xlist[-1] or data.y != self.ylist[-1] or data.theta != self.tlist[-1]:
+            self.xlist.append(data.x)
+            self.ylist.append(data.y)
+            self.tlist.append(data.theta)
+	    print(self.xlist,self.ylist,self.tlist)
 
     def map_md_callback(self, msg):
         """
@@ -349,7 +352,13 @@ class Navigator:
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
-                pass
+                if self.xlist:
+	            self.x_g=self.xlist.pop(0)
+	            self.y_g=self.ylist.pop(0)
+	            self.theta_g=self.tlist.pop(0)
+		    self.replan()
+		else:
+		    pass
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
