@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import rospy
+from asl_turtlebot.msg import DetectedObject
 from nav_msgs.msg import OccupancyGrid, MapMetaData, Path
 from geometry_msgs.msg import Twist, Pose2D, PoseStamped
 from std_msgs.msg import String
@@ -24,6 +25,8 @@ class Mode(Enum):
     ALIGN = 1
     TRACK = 2
     PARK = 3
+    STOP=4
+    CROSS=5
 
 class Navigator:
     """
@@ -33,6 +36,9 @@ class Navigator:
     def __init__(self):
         rospy.init_node('turtlebot_navigator', anonymous=True)
         self.mode = Mode.IDLE
+        self.xlist=[]
+        self.ylist=[]
+        self.tlist=[]
 
         # current state
         self.x = 0.0
@@ -65,8 +71,8 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-	self.v_max=0.2
-	self.om_max=0.4
+        self.v_max=0.2*10
+        self.om_max=0.4*10
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -103,18 +109,61 @@ class Navigator:
 
         self.cfg_srv = Server(NavigatorConfig, self.dyn_cfg_callback)
 
+        self.stop_min_dist=1.0
+        self.stop_time=3.0
+        self.crossing_time=3.0
         rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
+        rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
 
         print "finished init"
-        
+    
+    def stop_sign_detected_callback(self, msg):
+        """ callback for when the detector has found a stop sign. Note that
+        a distance of 0 can mean that the lidar did not pickup the stop sign at all """
+
+        # distance of the stop sign
+        print "Stop Sign Destected"
+        dist = msg.distance
+
+        # if close enough and in nav mode, stop
+        if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
+            self.init_stop_sign()
+
+    def init_stop_sign(self):
+        """ initiates a stop sign maneuver """
+
+        self.stop_sign_start = rospy.get_rostime()
+        self.mode = Mode.STOP
+        print "initial stop sign"
+
+    def has_stopped(self):
+        """ checks if stop sign maneuver is over """
+
+        return self.mode == Mode.STOP and \
+               rospy.get_rostime() - self.stop_sign_start > rospy.Duration.from_sec(self.stop_time)
+
+    def init_crossing(self):
+        """ initiates an intersection crossing maneuver """
+
+        self.cross_start = rospy.get_rostime()
+        self.mode = Mode.CROSS
+        print "Start crossing"
+
+    def has_crossed(self):
+        """ checks if crossing maneuver is over """
+
+        return self.mode == Mode.CROSS and \
+               rospy.get_rostime() - self.cross_start > rospy.Duration.from_sec(self.crossing_time)
+
+
     def dyn_cfg_callback(self, config, level):
         rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3},vm:{vm},sa:{sa},td:{td}".format(**config))
         self.pose_controller.k1 = config["k1"]
         self.pose_controller.k2 = config["k2"]
         self.pose_controller.k3 = config["k3"]
-	self.v_max=config["vm"]
+        self.v_max=config["vm"]
         self.spline_alpha = config["sa"]
         self.traj_dt = config["td"]
         return config
@@ -123,11 +172,11 @@ class Navigator:
         """
         loads in goal if different from current goal, and replans
         """
-        if data.x != self.x_g or data.y != self.y_g or data.theta != self.theta_g:
-            self.x_g = data.x
-            self.y_g = data.y
-            self.theta_g = data.theta
-            self.replan()
+        if not self.xlist or data.x != self.xlist[-1] or data.y != self.ylist[-1] or data.theta != self.tlist[-1]:
+            self.xlist.append(data.x)
+            self.ylist.append(data.y)
+            self.tlist.append(data.theta)
+        print(self.xlist,self.ylist,self.tlist)
 
     def map_md_callback(self, msg):
         """
@@ -232,7 +281,7 @@ class Navigator:
 
         if self.mode == Mode.PARK:
             V, om = self.pose_controller.compute_control(self.x, self.y, self.theta, t)
-        elif self.mode == Mode.TRACK:
+        elif self.mode == Mode.TRACK or self.mode==Mode.CROSS:
             V, om = self.traj_controller.compute_control(self.x, self.y, self.theta, t)
         elif self.mode == Mode.ALIGN:
             V, om = self.heading_controller.compute_control(self.x, self.y, self.theta, t)
@@ -321,11 +370,14 @@ class Navigator:
         self.th_init = traj_new[0,2]
         self.heading_controller.load_goal(self.th_init)
 
+        if self.mode==Mode.STOP:
+            return
+
         if not self.aligned():
             rospy.loginfo("Not aligned with start direction")
             self.switch_mode(Mode.ALIGN)
             return
-
+            
         rospy.loginfo("Ready to track")
         self.switch_mode(Mode.TRACK)
 
@@ -349,7 +401,13 @@ class Navigator:
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
-                pass
+                if self.xlist:
+                    self.x_g=self.xlist.pop(0)
+                    self.y_g=self.ylist.pop(0)
+                    self.theta_g=self.tlist.pop(0)
+                    self.replan()
+                else:
+                    pass
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
@@ -370,6 +428,13 @@ class Navigator:
                     self.y_g = None
                     self.theta_g = None
                     self.switch_mode(Mode.IDLE)
+            elif self.mode==Mode.STOP:
+                if self.has_stopped():
+                    self.init_crossing()
+            elif self.mode == Mode.CROSS:
+                # Crossing an intersection
+                if self.has_crossed():
+                    self.mode=Mode.TRACK
 
             self.publish_control()
             rate.sleep()
