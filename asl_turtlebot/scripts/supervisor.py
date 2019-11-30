@@ -184,7 +184,7 @@ class Supervisor:
         """ sends zero velocity to stay put """
 
         vel_g_msg = Twist()
-	vel_g_msg.linear.x = 0
+        vel_g_msg.linear.x = 0
         vel_g_msg.angular.z = 0
         self.cmd_vel_publisher.publish(vel_g_msg)
 
@@ -260,10 +260,10 @@ class Supervisor:
 
         elif self.mode == Mode.STOP:
             # At a stop sign
-	    if self.has_stopped():
-	        self.init_crossing()
-	    else:
-		self.stay_idle()
+            if self.has_stopped():
+                self.init_crossing()
+            else:
+                self.stay_idle()
 
         elif self.mode == Mode.CROSS:
             # Crossing an intersection
