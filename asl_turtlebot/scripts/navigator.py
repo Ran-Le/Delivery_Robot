@@ -111,7 +111,7 @@ class Navigator:
 
         self.stop_min_dist=1.0
         self.stop_time=3.0
-        self.crossing_time=3.0
+        self.crossing_time=8.0
         rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
@@ -124,11 +124,12 @@ class Navigator:
         a distance of 0 can mean that the lidar did not pickup the stop sign at all """
 
         # distance of the stop sign
-        print "Stop Sign Destected"
+        # print "Stop Sign Destected"
         dist = msg.distance
-
+        if self.mode==Mode.TRACK:
         # if close enough and in nav mode, stop
-        if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
+        # if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
+            print "Stop Sign Countdown"
             self.init_stop_sign()
 
     def init_stop_sign(self):
@@ -136,8 +137,8 @@ class Navigator:
 
         self.stop_sign_start = rospy.get_rostime()
         self.mode = Mode.STOP
-        print "initial stop sign"
-        print self.stop_sign_start
+        # print "initial stop sign"
+        # print self.stop_sign_start
 
     def has_stopped(self):
         """ checks if stop sign maneuver is over """
@@ -150,8 +151,8 @@ class Navigator:
 
         self.cross_start = rospy.get_rostime()
         self.mode = Mode.CROSS
-        print "Start crossing"
-        print self.cross_start
+        # print "Start crossing"
+        # print self.cross_start
 
     def has_crossed(self):
         """ checks if crossing maneuver is over """
@@ -372,7 +373,7 @@ class Navigator:
         self.th_init = traj_new[0,2]
         self.heading_controller.load_goal(self.th_init)
 
-        if self.mode==Mode.STOP:
+        if self.mode==Mode.STOP or self.mode==Mode.CROSS:
             return
 
         if not self.aligned():
@@ -432,10 +433,12 @@ class Navigator:
                     self.switch_mode(Mode.IDLE)
             elif self.mode==Mode.STOP:
                 if self.has_stopped():
+                    print rospy.get_rostime()
                     self.init_crossing()
             elif self.mode == Mode.CROSS:
                 # Crossing an intersection
                 if self.has_crossed():
+                    print rospy.get_rostime()
                     self.mode=Mode.TRACK
 
             self.publish_control()
