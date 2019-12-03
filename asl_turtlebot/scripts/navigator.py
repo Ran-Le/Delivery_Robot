@@ -15,6 +15,8 @@ import scipy.interpolate
 import matplotlib.pyplot as plt
 from controllers import PoseController, TrajectoryTracker, HeadingController
 from enum import Enum
+from visualization_msgs.msg import Marker
+import time
 
 from dynamic_reconfigure.server import Server
 from asl_turtlebot.cfg import NavigatorConfig
@@ -39,6 +41,7 @@ class Navigator:
         self.xlist=[]
         self.ylist=[]
         self.tlist=[]
+        self.object_dic={}
 
         # current state
         self.x = 0.0
@@ -71,8 +74,8 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        self.v_max=0.2
-        self.om_max=0.4
+        self.v_max=0.1
+        self.om_max=0.2
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -104,6 +107,7 @@ class Navigator:
         self.nav_smoothed_path_pub = rospy.Publisher('/cmd_smoothed_path', Path, queue_size=10)
         self.nav_smoothed_path_rej_pub = rospy.Publisher('/cmd_smoothed_path_rejected', Path, queue_size=10)
         self.nav_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        self.vis_pub = rospy.Publisher('marker_topic', Marker, queue_size=10)
 
         self.trans_listener = tf.TransformListener()
 
@@ -111,14 +115,111 @@ class Navigator:
 
         self.stop_min_dist=1.0
         self.stop_time=3.0
-        self.crossing_time=8.0
+        self.crossing_time=10.0
         rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
         rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
+        rospy.Subscriber('/detector/bird', DetectedObject, self.bird_callback)
+        rospy.Subscriber('/detector/cake', DetectedObject, self.cake_callback)
+        rospy.Subscriber('/detector/pizza', DetectedObject, self.pizza_callback)
+        rospy.Subscriber('/detector/bottle', DetectedObject, self.bottle_callback)
+        self.initPos=False
+        self.auto=False
+        self.bird=0
+        self.cake=1
+        self.pizza=2
+        self.bottle=3
 
         print "finished init"
     
+    def startPlan(self):
+        for i in range(4):
+            if i==self.bird:
+                print i
+                print "bird"
+                if 'bird' in self.object_dic:
+                    x,y,t=self.object_dic['bird']
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+            elif i==self.cake:  
+                print i
+                print "cake"
+                if 'cake' in self.object_dic:
+                    x,y,t=self.object_dic['cake']
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+            elif i==self.pizza:
+                print i
+                print "pizza"
+                if 'pizza' in self.object_dic:
+                    x,y,t=self.object_dic['pizza']
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+            elif i==self.bottle:
+                print i
+                print "bottle"
+                if 'bottle' in self.object_dic:
+                    x,y,t=self.object_dic['bottle']
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+        print 4
+        print "Destination"
+        x,y,t=self.object_dic['start']
+        self.xlist.append(x)
+        self.ylist.append(y)
+        self.tlist.append(t)
+
+    def show(self,idx,x,y,r,g,b,t):
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time()
+        marker.id = idx
+        marker.type = t # sphere
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = 0
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.a = 1.0
+        marker.color.r = r
+        marker.color.g = g
+        marker.color.b = b
+        self.vis_pub.publish(marker)        
+
+    def bird_callback(self,msg):
+        self.object_dic['bird']=(self.x,self.y,self.theta)
+        print 'bird'
+        print self.object_dic['bird']
+        self.show(0,self.x,self.y,1.0,0.0,0.0,2)
+
+    def cake_callback(self,msg):
+        self.object_dic['cake']=(self.x,self.y,self.theta)
+        print 'cake'
+        print self.object_dic['cake']
+        self.show(1,self.x,self.y,0.0,1.0,0.0,2)
+
+    def pizza_callback(self,msg):
+        self.object_dic['pizza']=(self.x,self.y,self.theta)
+        print 'pizza'
+        print self.object_dic['pizza']
+        self.show(2,self.x,self.y,0.0,0.0,1.0,2)
+
+    def bottle_callback(self,msg):
+        self.object_dic['bottle']=(self.x,self.y,self.theta)
+        print 'bottle'
+        print self.object_dic['bottle']
+        self.show(2,self.x,self.y,0.0,1.0,1.0,2)
+
     def stop_sign_detected_callback(self, msg):
         """ callback for when the detector has found a stop sign. Note that
         a distance of 0 can mean that the lidar did not pickup the stop sign at all """
@@ -126,9 +227,9 @@ class Navigator:
         # distance of the stop sign
         # print "Stop Sign Destected"
         dist = msg.distance
-        if self.mode==Mode.TRACK:
+        # if self.mode==Mode.TRACK:
         # if close enough and in nav mode, stop
-        # if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
+        if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
             print "Stop Sign Countdown"
             self.init_stop_sign()
 
@@ -169,17 +270,23 @@ class Navigator:
         self.v_max=config["vm"]
         self.spline_alpha = config["sa"]
         self.traj_dt = config["td"]
+        self.bird=config["bird"]
+        self.cake=config["cake"]
+        self.pizza=config["pizza"]
+        self.bottle=config["bottle"]
+        self.auto=config["auto"]
         return config
 
     def cmd_nav_callback(self, data):
         """
         loads in goal if different from current goal, and replans
         """
-        if not self.xlist or data.x != self.xlist[-1] or data.y != self.ylist[-1] or data.theta != self.tlist[-1]:
-            self.xlist.append(data.x)
-            self.ylist.append(data.y)
-            self.tlist.append(data.theta)
-        # print(self.xlist,self.ylist,self.tlist)
+        if data.x != self.x_g or data.y != self.y_g or data.theta != self.theta_g:
+            self.x_g=data.x
+            self.y_g=data.y
+            self.theta_g=data.theta
+            self.replan()
+        # print(self.x_g,self.y_g,self.theta_g)
 
     def map_md_callback(self, msg):
         """
@@ -314,7 +421,7 @@ class Navigator:
         """
         # Make sure we have a map
         if not self.occupancy:
-            # rospy.loginfo("Navigator: replanning canceled, waiting for occupancy map.")
+            rospy.loginfo("Navigator: replanning canceled, waiting for occupancy map.")
             self.switch_mode(Mode.IDLE)
             return
 
@@ -326,19 +433,19 @@ class Navigator:
         x_goal = self.snap_to_grid((self.x_g, self.y_g))
         problem = AStar(state_min,state_max,x_init,x_goal,self.occupancy,self.plan_resolution)
 
-        # rospy.loginfo("Navigator: computing navigation plan")
+        rospy.loginfo("Navigator: computing navigation plan")
         success =  problem.solve()
         if not success:
-            # rospy.loginfo("Planning failed")
+            rospy.loginfo("Planning failed")
             return
-        # rospy.loginfo("Planning Succeeded")
+        rospy.loginfo("Planning Succeeded")
 
         planned_path = problem.path
         
 
         # Check whether path is too short
         if len(planned_path) < 4:
-            # rospy.loginfo("Path too short to track")
+            rospy.loginfo("Path too short to track")
             self.switch_mode(Mode.PARK)
             return
 
@@ -377,11 +484,11 @@ class Navigator:
             return
 
         if not self.aligned():
-            # rospy.loginfo("Not aligned with start direction")
+            rospy.loginfo("Not aligned with start direction")
             self.switch_mode(Mode.ALIGN)
             return
             
-        # rospy.loginfo("Ready to track")
+        rospy.loginfo("Ready to track")
         self.switch_mode(Mode.TRACK)
 
     def run(self):
@@ -394,17 +501,28 @@ class Navigator:
                 self.y = translation[1]
                 euler = tf.transformations.euler_from_quaternion(rotation)
                 self.theta = euler[2]
+                if self.initPos==False:
+                    self.object_dic['start']=(self.x,self.y,self.theta)
+                    print 'start position'
+                    print self.object_dic['start']
+                    self.initPos=True
+                    self.show(3,self.x,self.y,1.0,1.0,0.0,1)
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
                 self.current_plan = []
                 # rospy.loginfo("Navigator: waiting for state info")
                 self.switch_mode(Mode.IDLE)
                 print e
                 pass
-
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
+                if self.auto:
+                    print "Delivery start"
+                    self.startPlan()
+                    self.auto=False
                 if self.xlist:
+                    print "Read next goal"
+                    time.sleep(3)
                     self.x_g=self.xlist.pop(0)
                     self.y_g=self.ylist.pop(0)
                     self.theta_g=self.tlist.pop(0)
