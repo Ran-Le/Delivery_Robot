@@ -74,8 +74,8 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        self.v_max=0.1
-        self.om_max=0.2
+        self.v_max=0.2
+        self.om_max=0.5
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -95,6 +95,12 @@ class Navigator:
         self.kpy = 0.5
         self.kdx = 1.5
         self.kdy = 1.5
+
+        #try
+        self.kpx = 0.5*5
+        self.kpy = 0.5*5
+        self.kdx = 1.5*5
+        self.kdy = 1.5*5
 
         # heading controller parameters
         self.kp_th = 2.
@@ -120,26 +126,29 @@ class Navigator:
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
         rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
-        rospy.Subscriber('/detector/bird', DetectedObject, self.bird_callback)
+        rospy.Subscriber('/detector/broccoli', DetectedObject, self.broccoli_callback)
         rospy.Subscriber('/detector/cake', DetectedObject, self.cake_callback)
-        rospy.Subscriber('/detector/pizza', DetectedObject, self.pizza_callback)
-        rospy.Subscriber('/detector/bottle', DetectedObject, self.bottle_callback)
+        rospy.Subscriber('/detector/bowl', DetectedObject, self.bowl_callback)
+        rospy.Subscriber('/detector/banana', DetectedObject, self.banana_callback)
+        rospy.Subscriber('/detector/donut', DetectedObject, self.donut_callback)
         self.initPos=False
         self.auto=False
-        self.bird=0
+        self.broccoli=0
         self.cake=1
-        self.pizza=2
-        self.bottle=3
+        self.bowl=2
+        self.banana=3
+        self.donut=4
+        self.control=False
 
         print "finished init"
     
     def startPlan(self):
-        for i in range(4):
-            if i==self.bird:
+        for i in range(5):
+            if i==self.broccoli:
                 print i
-                print "bird"
-                if 'bird' in self.object_dic:
-                    x,y,t=self.object_dic['bird']
+                print "broccoli"
+                if 'broccoli' in self.object_dic:
+                    x,y,t=self.object_dic['broccoli']
                     self.xlist.append(x)
                     self.ylist.append(y)
                     self.tlist.append(t)
@@ -151,19 +160,27 @@ class Navigator:
                     self.xlist.append(x)
                     self.ylist.append(y)
                     self.tlist.append(t)
-            elif i==self.pizza:
+            elif i==self.bowl:
                 print i
-                print "pizza"
-                if 'pizza' in self.object_dic:
-                    x,y,t=self.object_dic['pizza']
+                print "bowl"
+                if 'bowl' in self.object_dic:
+                    x,y,t=self.object_dic['bowl']
                     self.xlist.append(x)
                     self.ylist.append(y)
                     self.tlist.append(t)
-            elif i==self.bottle:
+            elif i==self.banana:
                 print i
-                print "bottle"
-                if 'bottle' in self.object_dic:
-                    x,y,t=self.object_dic['bottle']
+                print "banana"
+                if 'banana' in self.object_dic:
+                    x,y,t=self.object_dic['banana']
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+            elif i==self.donut:
+                print i
+                print "donut"
+                if 'donut' in self.object_dic:
+                    x,y,t=self.object_dic['donut']
                     self.xlist.append(x)
                     self.ylist.append(y)
                     self.tlist.append(t)
@@ -196,10 +213,10 @@ class Navigator:
         marker.color.b = b
         self.vis_pub.publish(marker)        
 
-    def bird_callback(self,msg):
-        self.object_dic['bird']=(self.x,self.y,self.theta)
-        print 'bird'
-        print self.object_dic['bird']
+    def broccoli_callback(self,msg):
+        self.object_dic['broccoli']=(self.x,self.y,self.theta)
+        print 'broccoli'
+        print self.object_dic['broccoli']
         self.show(0,self.x,self.y,1.0,0.0,0.0,2)
 
     def cake_callback(self,msg):
@@ -208,17 +225,23 @@ class Navigator:
         print self.object_dic['cake']
         self.show(1,self.x,self.y,0.0,1.0,0.0,2)
 
-    def pizza_callback(self,msg):
-        self.object_dic['pizza']=(self.x,self.y,self.theta)
-        print 'pizza'
-        print self.object_dic['pizza']
+    def bowl_callback(self,msg):
+        self.object_dic['bowl']=(self.x,self.y,self.theta)
+        print 'bowl'
+        print self.object_dic['bowl']
         self.show(2,self.x,self.y,0.0,0.0,1.0,2)
 
-    def bottle_callback(self,msg):
-        self.object_dic['bottle']=(self.x,self.y,self.theta)
-        print 'bottle'
-        print self.object_dic['bottle']
-        self.show(2,self.x,self.y,0.0,1.0,1.0,2)
+    def banana_callback(self,msg):
+        self.object_dic['banana']=(self.x,self.y,self.theta)
+        print 'banana'
+        print self.object_dic['banana']
+        self.show(3,self.x,self.y,0.0,1.0,1.0,2)
+
+    def donut_callback(self,msg):
+        self.object_dic['donut']=(self.x,self.y,self.theta)
+        print 'donut'
+        print self.object_dic['donut']
+        self.show(4,self.x,self.y,1.0,1.0,0.0,2)
 
     def stop_sign_detected_callback(self, msg):
         """ callback for when the detector has found a stop sign. Note that
@@ -270,11 +293,13 @@ class Navigator:
         self.v_max=config["vm"]
         self.spline_alpha = config["sa"]
         self.traj_dt = config["td"]
-        self.bird=config["bird"]
-        self.cake=config["cake"]
-        self.pizza=config["pizza"]
-        self.bottle=config["bottle"]
+
         self.auto=config["auto"]
+        self.broccoli=config["broccoli"]
+        self.cake=config["cake"]
+        self.bowl=config["bowl"]
+        self.banana=config["banana"]
+        self.donut=config["donut"]
         return config
 
     def cmd_nav_callback(self, data):
@@ -309,7 +334,7 @@ class Navigator:
                                                   self.map_height,
                                                   self.map_origin[0],
                                                   self.map_origin[1],
-                                                  8,
+                                                  12,
                                                   self.map_probs)
             if self.x_g is not None:
                 # if we have a goal to plan to, replan
@@ -506,7 +531,7 @@ class Navigator:
                     print 'start position'
                     print self.object_dic['start']
                     self.initPos=True
-                    self.show(3,self.x,self.y,1.0,1.0,0.0,1)
+                    self.show(5,self.x,self.y,1.0,0.0,1.0,1)
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
                 self.current_plan = []
                 # rospy.loginfo("Navigator: waiting for state info")
@@ -517,6 +542,7 @@ class Navigator:
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
                 if self.auto:
+                    self.control=True
                     print "Delivery start"
                     self.startPlan()
                     self.auto=False
@@ -558,8 +584,8 @@ class Navigator:
                 if self.has_crossed():
                     print rospy.get_rostime()
                     self.mode=Mode.TRACK
-
-            self.publish_control()
+            if self.control :
+                self.publish_control()
             rate.sleep()
 
 if __name__ == '__main__':    

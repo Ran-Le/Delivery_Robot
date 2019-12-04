@@ -33,7 +33,7 @@ class DetOccupancyGrid2D(object):
 
 class StochOccupancyGrid2D(object):
     def __init__(self, resolution, width, height, origin_x, origin_y,
-                window_size, probs, thresh=0.5):
+                window_size, probs, thresh=0.1):
         self.resolution = resolution
         self.width = width
         self.height = height
@@ -42,6 +42,7 @@ class StochOccupancyGrid2D(object):
         self.probs = probs
         self.window_size = window_size
         self.thresh = thresh
+        print thresh
 
     def snap_to_grid(self, x):
         return (self.resolution*round(x[0]/self.resolution), self.resolution*round(x[1]/self.resolution))
