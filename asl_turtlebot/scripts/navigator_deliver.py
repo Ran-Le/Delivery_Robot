@@ -109,7 +109,7 @@ class Navigator:
 
         # heading controller parameters
         self.kp_th = 2.
-	self.kp_th = 5.  #try
+        self.kp_th = 5.  #try
 
         self.traj_controller = TrajectoryTracker(self.kpx, self.kpy, self.kdx, self.kdy, self.v_max, self.om_max)
         self.pose_controller = PoseController(0., 0., 0., self.v_max, self.om_max)
@@ -137,6 +137,7 @@ class Navigator:
         rospy.Subscriber('/detector/bowl', DetectedObject, self.bowl_callback)
         rospy.Subscriber('/detector/banana', DetectedObject, self.banana_callback)
         rospy.Subscriber('/detector/donut', DetectedObject, self.donut_callback)
+        rospy.Subscriber('/delivery_request', String, self.delivery_callback)
         self.initPos=False
         self.auto=False
         self.broccoli=0
@@ -218,6 +219,21 @@ class Navigator:
         marker.color.g = g
         marker.color.b = b
         self.vis_pub.publish(marker)        
+
+    def delivery_callback(self,msg):
+        obj=msg.data
+        destination_list=obj.split(',')
+        for dest in destination_list:
+            if dest in self.object_dic:
+                x,y,t=self.object_dic[dest]
+                if x in self.xlist or x==self.x:
+                    print "Request already taken"
+                else:
+                    print "New request: "+dest
+                    self.xlist.append(x)
+                    self.ylist.append(y)
+                    self.tlist.append(t)
+
 
     def broccoli_callback(self,msg):
         self.object_dic['broccoli']=(self.x,self.y,self.theta)
@@ -340,8 +356,8 @@ class Navigator:
                                                   self.map_height,
                                                   self.map_origin[0],
                                                   self.map_origin[1],
-                                                  12,
-                                                  self.map_probs)
+                                                  20,
+                                                  self.map_probs, thresh=0.3)
             if self.x_g is not None:
                 # if we have a goal to plan to, replan
                 # rospy.loginfo("replanning because of new map")
