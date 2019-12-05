@@ -80,7 +80,7 @@ class Navigator:
         
         # Robot limits
         self.v_max=0.2
-        self.om_max=0.5
+        self.om_max=0.5 #0.5
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -102,13 +102,14 @@ class Navigator:
         self.kdy = 1.5
 
         #try
-        self.kpx = 0.5*5
-        self.kpy = 0.5*5
-        self.kdx = 1.5*5
-        self.kdy = 1.5*5
+        self.kpx = 0.5
+        self.kpy = 0.5
+        self.kdx = 1.5
+        self.kdy = 1.5
 
         # heading controller parameters
         self.kp_th = 2.
+	self.kp_th = 5.  #try
 
         self.traj_controller = TrajectoryTracker(self.kpx, self.kpy, self.kdx, self.kdy, self.v_max, self.om_max)
         self.pose_controller = PoseController(0., 0., 0., self.v_max, self.om_max)
