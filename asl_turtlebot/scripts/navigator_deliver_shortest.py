@@ -21,6 +21,16 @@ import json
 
 from dynamic_reconfigure.server import Server
 from asl_turtlebot.cfg import NavigatorConfig
+import itertools
+
+point_mat = {}
+
+def cal_points(pt_dic):
+    key = pt_dic.keys()
+    n = len(key)
+    for i in range(n):
+        for j in range(n):
+            point_mat[(key[i], key[j])] = np.sqrt((pt_dic[key[i]][0] - pt_dic[key[j]][0])**2 + (pt_dic[key[i]][1] - pt_dic[key[j]][1])**2)
 
 # state machine modes, not all implemented
 class Mode(Enum):
@@ -44,10 +54,10 @@ class Navigator:
         self.tlist=[]
         self.object_dic={}
         with open('locations.json', 'r') as f:
-            print 'load locations'
             self.object_dic = json.load(f)
             for i in self.object_dic:
                 print i
+        cal_points(self.object_dic)
 
         # current state
         self.x = 0.0
@@ -231,10 +241,50 @@ class Navigator:
                     print "Request already taken"
                 else:
                     print "New request: "+dest
+                    n = len(self.xlist)
                     self.xlist.append(x)
                     self.ylist.append(y)
                     self.tlist.append(t)
+                    key = self.object_dic.keys()
+            # for k in key:
+            # point_mat[(k, dest)] = np.sqrt((x - self.object_dic[k][0])**2 + (y - self.object_dic[k][1])**2)
 
+                    def helper(lst):
+                        if len(lst) == 1:
+                            return [lst]
+                        res = []
+                        for i in range(len(lst)):
+                            lst_del = lst[:i] + lst[i+1:]
+                            pre_res = helper(lst_del)
+                        for r in pre_res:
+                            res.append(r + [lst[i]])
+                            print(res)
+                        return res
+                    
+                    pts_lst = destination_list[:-1]
+                    route = list(itertools.permutations(pts_lst))# helper(pts_lst) # possible route index
+                    costs = []
+                    print(route)
+                    for i in range(len(route)):
+                        route[i] = [destination_list[-1]] + list(route[i]) + [destination_list[-1]]
+                        print(route[i])
+                        cost = 0
+                        for j in range(len(route[i])-1):
+                            cost += point_mat[(route[i][j], route[i][j+1])]
+                        costs.append(cost)
+                    opt_route = route[costs.index(min(costs))]
+                    # print(costs)
+                    # print(route)
+                    print(opt_route)
+                    xlist, ylist, tlist = [], [], []
+                    for i in range(len(opt_route)):
+                        xlist.append(self.object_dic[opt_route[i]][0])
+                        ylist.append(self.object_dic[opt_route[i]][1])
+                        tlist.append(self.object_dic[opt_route[i]][2])
+                    self.xlist = xlist
+                    self.ylist = ylist
+                    self.tlist = tlist
+            
 
     def broccoli_callback(self,msg):
         self.object_dic['broccoli']=(self.x,self.y,self.theta)
@@ -357,9 +407,8 @@ class Navigator:
                                                   self.map_height,
                                                   self.map_origin[0],
                                                   self.map_origin[1],
-                                                  20,
+                                                  16,
                                                   self.map_probs, thresh=0.3)
-            #16 for roundabout 20 for safety
             if self.x_g is not None:
                 # if we have a goal to plan to, replan
                 # rospy.loginfo("replanning because of new map")
